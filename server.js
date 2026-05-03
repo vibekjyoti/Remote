@@ -8,7 +8,7 @@ const server = http.createServer(app);
 // 1. Strict CORS configuration to allow mobile and web clients to connect seamlessly
 const io = new Server(server, {
     cors: {
-        origin: "*", 
+        origin: "https://host-kappa-one.vercel.app/", 
         methods: ["GET", "POST"],
         transports: ['websocket', 'polling']
     }
