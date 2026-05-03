@@ -5,16 +5,15 @@ const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
 
-// 1. Strict CORS configuration to allow mobile and web clients to connect seamlessly
+// 1. Strict CORS configuration
 const io = new Server(server, {
     cors: {
-        origin: "https://host-kappa-one.vercel.app/", 
+        origin: "https://host-kappa-one.vercel.app/", // Or explicitly specify your Vercel domain: "https://your-project.vercel.app"
         methods: ["GET", "POST"],
         transports: ['websocket', 'polling']
     }
 });
 
-// Variable to keep track of the Android phone's socket ID
 let streamerId = null; 
 
 io.on('connection', (socket) => {
@@ -23,57 +22,43 @@ io.on('connection', (socket) => {
     // ==========================================
     // 📱 ANDROID PHONE EVENTS
     // ==========================================
-
-    // The phone registers itself as the host when it connects
     socket.on('register_streamer', () => {
         streamerId = socket.id;
         console.log('📱 Streamer registered:', streamerId);
-        
-        // Tell any web viewers that might already be waiting that the phone is ready!
         socket.broadcast.emit('streamer_online');
     });
-
 
     // ==========================================
     // 💻 WEB VIEWER EVENTS
     // ==========================================
-
-    // The web browser asks for the video stream
     socket.on('request_stream', () => {
         console.log('💻 Viewer requesting stream:', socket.id);
-        
         if (streamerId) {
-            // Forward the viewer's ID to the Android phone so it knows where to send the video
             io.to(streamerId).emit('viewer_requested', socket.id);
         } else {
             console.log('⚠️ Stream requested, but the phone is not connected yet.');
         }
     });
 
-
     // ==========================================
     // 🌉 WEBRTC SIGNALING RELAY (THE BRIDGE)
     // ==========================================
-
-    // 1. Phone sends a WebRTC Offer to the Web Browser
     socket.on('webrtc_offer', (data) => {
         console.log(`Relaying Offer: ${socket.id} -> ${data.to}`);
         io.to(data.to).emit('webrtc_offer', { 
             sdp: data.sdp, 
-            from: socket.id // CRITICAL: Tell the browser who sent this offer
+            from: socket.id 
         });
     });
 
-    // 2. Web Browser sends a WebRTC Answer back to the Phone
     socket.on('webrtc_answer', (data) => {
         console.log(`Relaying Answer: ${socket.id} -> ${data.to}`);
         io.to(data.to).emit('webrtc_answer', { 
             sdp: data.sdp, 
-            from: socket.id // CRITICAL: Tell the phone who sent this answer
+            from: socket.id 
         });
     });
 
-    // 3. Both devices send ICE Candidates (network routing info) to each other
     socket.on('ice_candidate', (data) => {
         io.to(data.to).emit('ice_candidate', { 
             candidate: data.candidate, 
@@ -81,6 +66,16 @@ io.on('connection', (socket) => {
         });
     });
 
+    // ==========================================
+    // 🖱️ REMOTE MOUSE CONTROL RELAY
+    // ==========================================
+    socket.on('remote_input', (data) => {
+        console.log(`Relaying Click: X:${data.x}, Y:${data.y} to ${data.to}`);
+        io.to(data.to).emit('remote_input', {
+            x: data.x,
+            y: data.y
+        });
+    });
 
     // ==========================================
     // 🧹 CLEANUP
@@ -91,14 +86,13 @@ io.on('connection', (socket) => {
         if (socket.id === streamerId) {
             console.log('📱 Streamer went offline.');
             streamerId = null;
-            // Tell the web viewers that the stream has ended
             socket.broadcast.emit('streamer_offline');
         }
     });
 });
 
-// 2. Listen on 0.0.0.0 to expose the server to the local Wi-Fi network
-const PORT = 3000;
+// 2. Port binding for Render/Cloud hosting
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Signaling server running on port ${PORT} across the network (0.0.0.0)`);
+    console.log(`🚀 Server running on port ${PORT} across the network (0.0.0.0)`);
 });
